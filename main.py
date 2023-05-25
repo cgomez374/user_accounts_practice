@@ -28,7 +28,7 @@ login_manager.init_app(app)
 ##CONFIGURE TABLES
 
 class BlogPost(db.Model):
-    __tablename__ = "blog_posts"
+    # __tablename__ = "blog_posts"
     id = db.Column(db.Integer, primary_key=True)
     author = db.Column(db.String(250), nullable=False)
     title = db.Column(db.String(250), unique=True, nullable=False)
@@ -36,6 +36,7 @@ class BlogPost(db.Model):
     date = db.Column(db.String(250), nullable=False)
     body = db.Column(db.Text, nullable=False)
     img_url = db.Column(db.String(250), nullable=False)
+    # user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
 
 
 class User(UserMixin, db.Model):
@@ -43,6 +44,7 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(100), index=True, unique=False)
     email = db.Column(db.String(150), index=True, unique=True)
     hashed_password = db.Column(db.String(150), index=False, unique=False)
+    # posts = relationship('BlogPost', backref='author', lazy='dynamic')
 
     def set_password(self, password):
         self.hashed_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=8)
@@ -62,10 +64,10 @@ def load_user(user_id):
 # check if the user is an admin decorator
 def admin_required(func):
     @wraps(func)
-    def wrapper():
+    def wrapper(*args, **kwargs):
         if int(current_user.get_id()) != 1:
             abort(403, description='Unauthorized access')
-        return func()
+        return func(*args, **kwargs)
     return wrapper
 
 
@@ -73,8 +75,11 @@ def admin_required(func):
 def get_all_posts():
     posts = BlogPost.query.all()
     is_admin = False
-    if current_user and int(current_user.get_id()) == 1:
-        is_admin = True
+    try:
+        if current_user and int(current_user.get_id()) == 1:
+            is_admin = True
+    except TypeError:
+        pass
     return render_template("index.html", all_posts=posts, logged_in=current_user.is_authenticated, is_admin=is_admin)
 
 
@@ -171,7 +176,7 @@ def add_new_post():
             subtitle=form.subtitle.data,
             body=form.body.data,
             img_url=form.img_url.data,
-            author=current_user,
+            author=current_user.name,
             date=date.today().strftime("%B %d, %Y")
         )
         db.session.add(new_post)
@@ -180,7 +185,7 @@ def add_new_post():
     return render_template("make-post.html", form=form, logged_in=current_user.is_authenticated)
 
 
-@app.route("/edit-post/<int:post_id>")
+@app.route("/edit-post/<int:post_id>", methods=['GET', 'POST'])
 @login_required
 @admin_required
 def edit_post(post_id):
@@ -189,19 +194,18 @@ def edit_post(post_id):
         title=post.title,
         subtitle=post.subtitle,
         img_url=post.img_url,
-        author=post.author,
+        # author=post.author,
         body=post.body
     )
     if edit_form.validate_on_submit():
         post.title = edit_form.title.data
         post.subtitle = edit_form.subtitle.data
         post.img_url = edit_form.img_url.data
-        post.author = edit_form.author.data
+        # post.author = edit_form.author.data
         post.body = edit_form.body.data
         db.session.commit()
-        return redirect(url_for("show_post", post_id=post.id), logged_in=current_user.is_authenticated)
-
-    return render_template("make-post.html", form=edit_form)
+        return redirect(url_for("show_post", post_id=post.id, logged_in=current_user.is_authenticated))
+    return render_template("make-post.html", form=edit_form, logged_in=current_user.is_authenticated)
 
 
 @app.route("/delete/<int:post_id>")
