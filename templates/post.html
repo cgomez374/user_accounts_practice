@@ -10,7 +10,7 @@
             <h1>{{post.title}}</h1>
             <h2 class="subheading">{{post.subtitle}}</h2>
             <span class="meta">Posted by
-              <a href="#">{{post.author}}</a>
+              <a href="#">{{post.author.name}}</a>
               on {{post.date}}</span>
           </div>
         </div>
@@ -25,23 +25,30 @@
         <div class="col-lg-8 col-md-10 mx-auto">
             {{ post.body|safe }}
           <hr>
-
+            {% if is_admin %}
             <div class="clearfix">
             <a class="btn btn-primary float-right" href="{{url_for('edit_post', post_id=post.id)}}">Edit Post</a>
             </div>
+            {% endif %}
 
 
 
 <!--           Comments Area -->
           <div class="col-lg-8 col-md-10 mx-auto comment">
+            <form action="{{ url_for('show_post', post_id=post.id) }}" method="POST">
+              <textarea name="text"></textarea>
+              <button type="submit">submit</button>
+            </form>
               <ul class="commentList">
                 <li>
                     <div class="commenterImage">
                       <img src="https://pbs.twimg.com/profile_images/744849215675838464/IH0FNIXk.jpg"/>
                     </div>
                     <div class="commentText">
-                      <p>Some comment</p>
-                      <span class="date sub-text">comment author name</span>
+                      {% for comment in post.comments %}
+                      <p>{{ comment.text }}</p>
+                      <span class="date sub-text">{{ comment.author.name }}</span>
+                      {% endfor %}
                     </div>
                 </li>
               </ul>

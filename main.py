@@ -28,15 +28,20 @@ login_manager.init_app(app)
 ##CONFIGURE TABLES
 
 class BlogPost(db.Model):
-    # __tablename__ = "blog_posts"
     id = db.Column(db.Integer, primary_key=True)
-    author = db.Column(db.String(250), nullable=False)
     title = db.Column(db.String(250), unique=True, nullable=False)
     subtitle = db.Column(db.String(250), nullable=False)
     date = db.Column(db.String(250), nullable=False)
     body = db.Column(db.Text, nullable=False)
     img_url = db.Column(db.String(250), nullable=False)
-    # user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+
+    # User relationships
+    author_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+
+    # Comment Relationship
+    comments = relationship('Comment', backref='post')
+
+
 
 
 class User(UserMixin, db.Model):
@@ -44,7 +49,8 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(100), index=True, unique=False)
     email = db.Column(db.String(150), index=True, unique=True)
     hashed_password = db.Column(db.String(150), index=False, unique=False)
-    # posts = relationship('BlogPost', backref='author', lazy='dynamic')
+    posts = relationship('BlogPost', backref='author')
+    comments = relationship('Comment', backref='author')
 
     def set_password(self, password):
         self.hashed_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=8)
@@ -53,6 +59,14 @@ class User(UserMixin, db.Model):
         return check_password_hash(pwhash=self.hashed_password, password=submitted_password)
 
 
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    text = db.Column(db.String(300), nullable=False)
+    author_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    post_id = db.Column(db.Integer, db.ForeignKey('blog_post.id'))
+
+
+# db.drop_all()
 db.create_all()
 
 # user loader
@@ -149,10 +163,33 @@ def logout():
     return redirect(url_for('get_all_posts'))
 
 
-@app.route("/post/<int:post_id>")
+@app.route("/post/<int:post_id>", methods=['GET', 'POST'])
 def show_post(post_id):
     requested_post = BlogPost.query.get(post_id)
-    return render_template("post.html", post=requested_post)
+
+    if request.method == 'POST' and not current_user.is_authenticated:
+        flash('Must be authenticated to post comment')
+        return redirect(url_for('login'))
+    elif request.method == 'POST' and current_user.is_authenticated:
+        new_comment = Comment(
+            text=request.form['text'],
+            author_id=current_user.id,
+            post_id=post_id,
+            post=requested_post
+        )
+        # add comment to comment table
+        db.session.add(new_comment)
+
+        # Commit changes
+        db.session.commit()
+
+    is_admin = False
+    try:
+        if current_user and int(current_user.get_id()) == 1:
+            is_admin = True
+    except TypeError:
+        pass
+    return render_template("post.html", post=requested_post, logged_in=current_user.is_authenticated, is_admin=is_admin)
 
 
 @app.route("/about")
@@ -176,7 +213,8 @@ def add_new_post():
             subtitle=form.subtitle.data,
             body=form.body.data,
             img_url=form.img_url.data,
-            author=current_user.name,
+            author_id=current_user.id,
+            author=current_user,
             date=date.today().strftime("%B %d, %Y")
         )
         db.session.add(new_post)
@@ -194,14 +232,14 @@ def edit_post(post_id):
         title=post.title,
         subtitle=post.subtitle,
         img_url=post.img_url,
-        # author=post.author,
         body=post.body
     )
     if edit_form.validate_on_submit():
         post.title = edit_form.title.data
         post.subtitle = edit_form.subtitle.data
         post.img_url = edit_form.img_url.data
-        # post.author = edit_form.author.data
+        post.author = current_user
+        post.author_id = current_user.id
         post.body = edit_form.body.data
         db.session.commit()
         return redirect(url_for("show_post", post_id=post.id, logged_in=current_user.is_authenticated))
